@@ -1,0 +1,74 @@
+def request_handler(**data_dict):
+    def decorator(func):
+        @wraps(func)
+        def handle_request_data(*args, **kw):
+            try:
+                # check params
+                check_rule = build_check_rule(str(request.url_rule), get_rule_version(),
+                                              list(request.url_rule.methods & set(METHODS)))
+                check_func = check_param.get_check_rules().get(check_rule)
+                if check_func:
+                    check_func(*args, **kw)
+            except BusinessException as e:
+                if e.func is not None:
+                    return e.func()
+                elif e.code is not None and e.msg is not None:
+                    #logger.error('BusinessException, code: %s, msg: %s' % (e.code, e.msg))
+                    business_exception_log(e)
+                    return return_data(code=e.code, msg=e.msg)
+                else:
+                    return request_fail()
+            except Exception:
+                return request_fail()
+
+            try:
+                if request.trace_id is not None and request.full_path is not None:
+                    logger.info('trace_id is:' + request.trace_id + ' request path:' + request.full_path)
+
+                return func(*args, **kw)
+            except BusinessException as e:
+                if e.func is not None:
+                    return e.func()
+                elif e.code is not None and e.msg is not None:
+                    #logger.error('BusinessException, code: %s, msg: %s' % (e.code, e.msg))
+                    business_exception_log(e)
+                    if e.code == SYSTEM_CODE_404 or e.code == SYSTEM_CODE_503:
+                        return return_data(code=e.code, msg=SYSTEM_ERROR)
+                    else:
+                        return return_data(code=e.code, msg=e.msg)
+                else:
+                    return request_fail()
+            except Exception:
+                return request_fail()
+
+        return handle_request_data
+
+    return decorator
+
+def get_request_params():
+    if request.method == 'GET':
+        try:
+            request_params = json.loads(urllib.unquote_plus(request.args.get('params')))
+        except Exception:
+            request_params = {}
+    else:
+        request_params = {key: dict(request.form)[key][0] for key in dict(request.form)}
+    return request_params
+    
+  def return_data(code=200, data=None, msg=u'成功', login=None):
+    data = {} if data is None else data
+    data_json = json.dumps({'traceID': get_trace_id(),
+                            'code': code,
+                            'msg': msg,
+                            'sysTime':str(datetime.datetime.now()),
+                            'data': data})
+    response = make_response(data_json, 200)
+    response.headers['Content-Type'] = 'application/json'
+    response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin')
+    response.headers['Access-Control-Allow-Methods'] = 'PUT,GET,POST,DELETE'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    allow_headers = "Referer,Accept,Origin,User-Agent"
+    response.headers['Access-Control-Allow-Headers'] = allow_headers
+    create_auth_cookie(data, response, login)
+
+    return response
