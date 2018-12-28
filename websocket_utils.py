@@ -8,7 +8,7 @@ import tornado.websocket
 from tornado.web import RequestHandler
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
-from core.core import request_handler, get_request_params,return_data
+from core import request_handler, get_request_params,return_data
 import logging
 import json
 
